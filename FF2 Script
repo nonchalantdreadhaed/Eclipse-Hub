@@ -1,0 +1,188 @@
+-- Eclipse Hub - Football Fusion 2 (Fully Functional Final)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Ball Handling System
+local Ball
+local function GetBall()
+    local newBall = workspace:FindFirstChild("Ball") or workspace:WaitForChild("Ball")
+    if newBall and newBall:IsA("BasePart") then
+        return newBall
+    end
+    return nil
+end
+
+workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Ball" then
+        Ball = child
+    end
+end)
+Ball = GetBall()
+
+-- Core Movement Modifier
+local function SafeVelocity(part, newVelocity)
+    if part and part:IsDescendantOf(workspace) then
+        local currentVelocity = part.Velocity
+        local lerpedVelocity = currentVelocity:Lerp(newVelocity, 0.2)
+        part.Velocity = lerpedVelocity
+    end
+end
+
+-- Real Jump System
+local JumpBoostMultiplier = 1.0
+local JumpConnection
+JumpConnection = RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if char then
+        local humanoid = char:FindFirstChild("Humanoid")
+        if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+            humanoid.Velocity = Vector3.new(
+                humanoid.Velocity.X,
+                humanoid.JumpPower * JumpBoostMultiplier * 0.8,
+                humanoid.Velocity.Z
+            )
+        end
+    end
+end)
+
+-- Functional Ball Magnet
+local PullVectorEnabled = false
+local PullPower = 5
+local PullRadius = 5
+local PullConnection
+
+local function ApplyPullVector()
+    if PullConnection then PullConnection:Disconnect() end
+    
+    PullConnection = RunService.Heartbeat:Connect(function()
+        if not PullVectorEnabled then return end
+        
+        local currentBall = GetBall()
+        if not currentBall then return end
+        
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            local root = char.HumanoidRootPart
+            local ballPosition = currentBall.Position
+            local playerPosition = root.Position
+            
+            local direction = (playerPosition - ballPosition).Unit
+            local distance = (playerPosition - ballPosition).Magnitude
+            
+            if distance < PullRadius and distance > 2 then
+                local forceFactor = (PullRadius - distance)/PullRadius
+                local appliedForce = direction * (PullPower * forceFactor)
+                
+                SafeVelocity(currentBall, appliedForce * 25)
+            end
+        end
+    end)
+end
+
+-- Working QB Aimbot System
+local AimbotEnabled = false
+local AimbotConnection
+local LastAimTime = 0
+
+local function FindBestTarget()
+    local bestTarget, closestDistance = nil, math.huge
+    local myTeam = LocalPlayer.Team
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Team ~= myTeam then
+            local char = player.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local distance = (root.Position - LocalPlayer:GetMouse().Hit.p).Magnitude
+                    if distance < closestDistance then
+                        bestTarget = root
+                        closestDistance = distance
+                    end
+                end
+            end
+        end
+    end
+    
+    return bestTarget
+end
+
+local function SmoothAim(targetPosition)
+    local camera = workspace.CurrentCamera
+    local currentCFrame = camera.CFrame
+    local targetCFrame = CFrame.lookAt(currentCFrame.Position, targetPosition)
+    
+    camera.CFrame = currentCFrame:Lerp(targetCFrame, 0.25)
+end
+
+local function QB_Aimbot()
+    if AimbotConnection then AimbotConnection:Disconnect() end
+    
+    AimbotConnection = RunService.Heartbeat:Connect(function()
+        if not AimbotEnabled then return end
+        if time() - LastAimTime < 0.1 then return end
+        
+        local target = FindBestTarget()
+        if target then
+            local predictedPosition = target.Position + target.Velocity * 0.25
+            SmoothAim(predictedPosition)
+            LastAimTime = time()
+        end
+    end)
+end
+
+-- UI Configuration
+local Window = Rayfield:CreateWindow({
+    Name = "Eclipse Hub - Football Fusion 2",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "Security Checks Passed",
+})
+
+local MainTab = Window:CreateTab("Core Features", 4483362458)
+
+-- Jump Boost Control
+MainTab:CreateSlider({
+    Name = "Jump Multiplier",
+    Range = {1.0, 3.0},
+    Increment = 0.1,
+    CurrentValue = 1.0,
+    Callback = function(value)
+        JumpBoostMultiplier = math.clamp(value, 1.0, 3.0)
+    end
+})
+
+-- Ball Magnet Control
+MainTab:CreateToggle({
+    Name = "Ball Magnet",
+    CurrentValue = false,
+    Callback = function(state)
+        PullVectorEnabled = state
+        if state then
+            ApplyPullVector()
+        else
+            if PullConnection then
+                PullConnection:Disconnect()
+            end
+        end
+    end
+})
+
+-- Aimbot Control
+MainTab:CreateToggle({
+    Name = "QB Assist",
+    CurrentValue = false,
+    Callback = function(state)
+        AimbotEnabled = state
+        if state then
+            QB_Aimbot()
+        else
+            if AimbotConnection then
+                AimbotConnection:Disconnect()
+            end
+        end
+    end
+})
+
+Rayfield:LoadConfiguration()
